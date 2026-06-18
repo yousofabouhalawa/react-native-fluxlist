@@ -1,17 +1,18 @@
-#import "EditableListView.h"
+#import "FluxListView.h"
 
+#import <math.h>
 #import <React/RCTConversions.h>
 #import <QuartzCore/QuartzCore.h>
-#import <react/renderer/components/EditableListViewSpec/ComponentDescriptors.h>
-#import <react/renderer/components/EditableListViewSpec/EventEmitters.h>
-#import <react/renderer/components/EditableListViewSpec/Props.h>
-#import <react/renderer/components/EditableListViewSpec/RCTComponentViewHelpers.h>
+#import <react/renderer/components/FluxListViewSpec/ComponentDescriptors.h>
+#import <react/renderer/components/FluxListViewSpec/EventEmitters.h>
+#import <react/renderer/components/FluxListViewSpec/Props.h>
+#import <react/renderer/components/FluxListViewSpec/RCTComponentViewHelpers.h>
 
 #import "RCTFabricComponentsPlugins.h"
 
 using namespace facebook::react;
 
-@interface EditableListSwipeAction : NSObject
+@interface FluxListSwipeAction : NSObject
 @property (nonatomic, copy) NSString *key;
 @property (nonatomic, copy) NSString *title;
 @property (nonatomic, strong, nullable) UIColor *color;
@@ -19,17 +20,17 @@ using namespace facebook::react;
 @property (nonatomic, assign) BOOL destructive;
 @end
 
-@implementation EditableListSwipeAction
+@implementation FluxListSwipeAction
 @end
 
-static UIColor *EditableListDefaultActionBackgroundColor(BOOL destructive)
+static UIColor *FluxListDefaultActionBackgroundColor(BOOL destructive)
 {
   return destructive ? UIColor.systemRedColor : UIColor.systemBlueColor;
 }
 
-static UIColor *EditableListResolvedActionBackgroundColor(EditableListSwipeAction *action)
+static UIColor *FluxListResolvedActionBackgroundColor(FluxListSwipeAction *action)
 {
-  UIColor *fallbackColor = EditableListDefaultActionBackgroundColor(action.destructive);
+  UIColor *fallbackColor = FluxListDefaultActionBackgroundColor(action.destructive);
   UIColor *backgroundColor = action.color ?: fallbackColor;
   CGFloat alpha = CGColorGetAlpha(backgroundColor.CGColor);
   if (alpha <= 0.01) {
@@ -38,7 +39,7 @@ static UIColor *EditableListResolvedActionBackgroundColor(EditableListSwipeActio
   return backgroundColor;
 }
 
-static UIColor *EditableListForegroundColorForBackground(UIColor *backgroundColor)
+static UIColor *FluxListForegroundColorForBackground(UIColor *backgroundColor)
 {
   CGFloat red = 0.0;
   CGFloat green = 0.0;
@@ -52,7 +53,7 @@ static UIColor *EditableListForegroundColorForBackground(UIColor *backgroundColo
   return luminance > 0.62 ? UIColor.blackColor : UIColor.whiteColor;
 }
 
-static UIImage * _Nullable EditableListCombinedIconTitleImage(
+static UIImage * _Nullable FluxListCombinedIconTitleImage(
     UIImage *iconImage,
     NSString *title,
     UIColor *foregroundColor)
@@ -89,7 +90,7 @@ static UIImage * _Nullable EditableListCombinedIconTitleImage(
   }];
 }
 
-static BOOL EditableListShouldAnimateDeleteAction(EditableListSwipeAction *action)
+static BOOL FluxListShouldAnimateDeleteAction(FluxListSwipeAction *action)
 {
   if (!action.destructive) {
     return NO;
@@ -102,12 +103,12 @@ static BOOL EditableListShouldAnimateDeleteAction(EditableListSwipeAction *actio
 }
 
 template <typename ActionVector>
-static NSArray<EditableListSwipeAction *> *EditableListSwipeActionArrayFromVector(
+static NSArray<FluxListSwipeAction *> *FluxListSwipeActionArrayFromVector(
     const ActionVector &actions)
 {
-  NSMutableArray<EditableListSwipeAction *> *result = [NSMutableArray new];
+  NSMutableArray<FluxListSwipeAction *> *result = [NSMutableArray new];
   for (const auto &action : actions) {
-    EditableListSwipeAction *item = [EditableListSwipeAction new];
+    FluxListSwipeAction *item = [FluxListSwipeAction new];
     item.key = [NSString stringWithUTF8String:action.key.c_str()];
     item.title = [NSString stringWithUTF8String:action.title.c_str()];
     if (action.color) {
@@ -122,15 +123,21 @@ static NSArray<EditableListSwipeAction *> *EditableListSwipeActionArrayFromVecto
   return result;
 }
 
-@implementation EditableListView {
+@implementation FluxListView {
     UIView * _containerView;
     UITableView * _tableView;
     UISearchBar * _searchBar;
     NSMutableArray<UIView *> * _itemViews;
-    NSMutableArray<NSNumber *> * _itemHeights;
+    NSMutableArray<NSNumber *> * _mountedRowIndices;
     NSMutableArray<NSNumber *> * _rowItemIndices;
+    NSMutableDictionary<NSNumber *, UIView *> * _itemViewsByRow;
+    NSMutableDictionary<NSNumber *, NSNumber *> * _itemHeightsByRow;
     NSArray * _leadingSwipeActions;
     NSArray * _trailingSwipeActions;
+    NSInteger _itemCount;
+    CGFloat _estimatedItemHeight;
+    NSInteger _lastEmittedVisibleFirst;
+    NSInteger _lastEmittedVisibleLast;
     BOOL _searchEnabled;
     NSString * _searchPlaceholder;
     __weak UIView * _pendingNativeDeleteView;
@@ -142,27 +149,34 @@ static NSArray<EditableListSwipeAction *> *EditableListSwipeActionArrayFromVecto
 
 + (ComponentDescriptorProvider)componentDescriptorProvider
 {
-    return concreteComponentDescriptorProvider<EditableListViewComponentDescriptor>();
+    return concreteComponentDescriptorProvider<FluxListViewComponentDescriptor>();
 }
 
 - (instancetype)initWithFrame:(CGRect)frame
 {
   if (self = [super initWithFrame:frame]) {
-    static const auto defaultProps = std::make_shared<const EditableListViewProps>();
+    static const auto defaultProps = std::make_shared<const FluxListViewProps>();
     _props = defaultProps;
 
     _itemViews = [NSMutableArray new];
-    _itemHeights = [NSMutableArray new];
+    _mountedRowIndices = [NSMutableArray new];
+    _rowItemIndices = [NSMutableArray new];
+    _itemViewsByRow = [NSMutableDictionary new];
+    _itemHeightsByRow = [NSMutableDictionary new];
+    _itemCount = 0;
+    _estimatedItemHeight = 72.0;
+    _lastEmittedVisibleFirst = NSNotFound;
+    _lastEmittedVisibleLast = NSNotFound;
     _containerView = [[UIView alloc] initWithFrame:CGRectZero];
     _tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     _tableView.dataSource = self;
     _tableView.delegate = self;
     _tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
-    _tableView.estimatedRowHeight = 72.0;
+    _tableView.estimatedRowHeight = _estimatedItemHeight;
     _tableView.rowHeight = UITableViewAutomaticDimension;
     _tableView.backgroundColor = UIColor.systemBackgroundColor;
     [_tableView registerClass:[UITableViewCell class]
-       forCellReuseIdentifier:@"EditableListCell"];
+       forCellReuseIdentifier:@"FluxListCell"];
     _searchEnabled = NO;
     _searchPlaceholder = @"Search";
 
@@ -179,6 +193,7 @@ static NSArray<EditableListSwipeAction *> *EditableListSwipeActionArrayFromVecto
   _containerView.frame = self.bounds;
   _tableView.frame = _containerView.bounds;
   [self applySearchConfiguration];
+  [self emitVisibleRangeIfNeeded];
 }
 
 - (void)reloadTableView
@@ -198,6 +213,7 @@ static NSArray<EditableListSwipeAction *> *EditableListSwipeActionArrayFromVecto
       return;
     }
     [_tableView reloadData];
+    [self emitVisibleRangeIfNeeded];
   });
 }
 
@@ -255,16 +271,84 @@ static NSArray<EditableListSwipeAction *> *EditableListSwipeActionArrayFromVecto
   }
 }
 
-- (void)resizeItemHeightsForCount:(NSUInteger)count
+- (void)rebuildMountedItemViewMap
 {
-  NSMutableArray<NSNumber *> *nextHeights = [_itemHeights mutableCopy] ?: [NSMutableArray new];
-  while (nextHeights.count < count) {
-    [nextHeights addObject:@0];
+  [_itemViewsByRow removeAllObjects];
+  for (NSUInteger index = 0; index < _itemViews.count; index++) {
+    NSInteger row = index;
+    if (index < _mountedRowIndices.count) {
+      row = _mountedRowIndices[index].integerValue;
+    }
+    if (row >= 0) {
+      _itemViewsByRow[@(row)] = _itemViews[index];
+    }
   }
-  while (nextHeights.count > count) {
-    [nextHeights removeLastObject];
+}
+
+- (UIView *)mountedItemViewForRow:(NSInteger)row
+{
+  return _itemViewsByRow[@(row)];
+}
+
+- (NSInteger)mountedSlotForRow:(NSInteger)row
+{
+  NSNumber *rowNumber = @(row);
+  NSUInteger slot = [_mountedRowIndices indexOfObject:rowNumber];
+  if (slot != NSNotFound) {
+    return (NSInteger)slot;
   }
-  _itemHeights = nextHeights;
+  if (row >= 0 && row < _itemViews.count && _mountedRowIndices.count == 0) {
+    return row;
+  }
+  return NSNotFound;
+}
+
+- (void)emitVisibleRangeIfNeeded
+{
+  if (!_eventEmitter || _itemCount <= 0) {
+    return;
+  }
+
+  NSArray<NSIndexPath *> *visibleRows = _tableView.indexPathsForVisibleRows;
+  NSInteger first = NSNotFound;
+  NSInteger last = NSNotFound;
+  for (NSIndexPath *indexPath in visibleRows) {
+    NSInteger row = indexPath.row;
+    if (row < 0 || row >= _itemCount) {
+      continue;
+    }
+    if (first == NSNotFound || row < first) {
+      first = row;
+    }
+    if (last == NSNotFound || row > last) {
+      last = row;
+    }
+  }
+
+  if (first == NSNotFound || last == NSNotFound) {
+    CGFloat rowHeight = _estimatedItemHeight > 0.0 ? _estimatedItemHeight : 72.0;
+    first = MAX(0, (NSInteger)floor(_tableView.contentOffset.y / rowHeight));
+    NSInteger visibleCount = MAX(1, (NSInteger)ceil(CGRectGetHeight(_tableView.bounds) / rowHeight) + 1);
+    last = MIN(_itemCount - 1, first + visibleCount - 1);
+  }
+
+  if (first == _lastEmittedVisibleFirst && last == _lastEmittedVisibleLast) {
+    return;
+  }
+  _lastEmittedVisibleFirst = first;
+  _lastEmittedVisibleLast = last;
+
+  auto eventEmitter =
+      std::static_pointer_cast<const FluxListViewEventEmitter>(_eventEmitter);
+  if (!eventEmitter) {
+    return;
+  }
+
+  FluxListViewEventEmitter::OnVisibleRangeChange event = {
+      .first = static_cast<int>(first),
+      .last = static_cast<int>(last),
+  };
+  eventEmitter->onVisibleRangeChange(event);
 }
 
 - (BOOL)animateNativeDeleteForRow:(NSInteger)row
@@ -285,12 +369,10 @@ static NSArray<EditableListSwipeAction *> *EditableListSwipeActionArrayFromVecto
   // If UIKit and backing data are already out of sync, skip animated delete to avoid crashes.
   if (tableRowCount <= 0 || row >= tableRowCount || tableRowCount != dataRowCount) {
     [_itemViews removeObjectAtIndex:row];
-    if (row < _itemHeights.count) {
-      [_itemHeights removeObjectAtIndex:row];
-    }
     if (_rowItemIndices && row < _rowItemIndices.count) {
       [_rowItemIndices removeObjectAtIndex:row];
     }
+    [self rebuildMountedItemViewMap];
     [self reloadTableView];
     if (completion) {
       completion();
@@ -305,12 +387,10 @@ static NSArray<EditableListSwipeAction *> *EditableListSwipeActionArrayFromVecto
   }
 
   [_itemViews removeObjectAtIndex:row];
-  if (row < _itemHeights.count) {
-    [_itemHeights removeObjectAtIndex:row];
-  }
   if (_rowItemIndices && row < _rowItemIndices.count) {
     [_rowItemIndices removeObjectAtIndex:row];
   }
+  [self rebuildMountedItemViewMap];
 
   NSIndexPath *indexPath = [NSIndexPath indexPathForRow:row inSection:0];
   _isAnimatingNativeDelete = YES;
@@ -360,16 +440,9 @@ static NSArray<EditableListSwipeAction *> *EditableListSwipeActionArrayFromVecto
 - (void)mountChildComponentView:(UIView<RCTComponentViewProtocol> *)childComponentView
                           index:(NSInteger)index
 {
-  NSNumber *existingHeight = @0;
   NSUInteger existingIndex = [_itemViews indexOfObjectIdenticalTo:childComponentView];
   if (existingIndex != NSNotFound) {
-    if (existingIndex < _itemHeights.count) {
-      existingHeight = _itemHeights[existingIndex];
-    }
     [_itemViews removeObjectAtIndex:existingIndex];
-    if (existingIndex < _itemHeights.count) {
-      [_itemHeights removeObjectAtIndex:existingIndex];
-    }
     if ((NSInteger)existingIndex < index) {
       index -= 1;
     }
@@ -377,12 +450,7 @@ static NSArray<EditableListSwipeAction *> *EditableListSwipeActionArrayFromVecto
 
   NSInteger safeIndex = MAX(0, MIN(index, (NSInteger)_itemViews.count));
   [_itemViews insertObject:childComponentView atIndex:(NSUInteger)safeIndex];
-  NSNumber *heightToInsert = (existingIndex != NSNotFound) ? existingHeight : @0;
-  if (safeIndex <= _itemHeights.count) {
-    [_itemHeights insertObject:heightToInsert atIndex:(NSUInteger)safeIndex];
-  } else {
-    [_itemHeights addObject:heightToInsert];
-  }
+  [self rebuildMountedItemViewMap];
 
   if (_hasPendingNativeDelete || _isAnimatingNativeDelete) {
     return;
@@ -421,9 +489,7 @@ static NSArray<EditableListSwipeAction *> *EditableListSwipeActionArrayFromVecto
   }
 
   [_itemViews removeObjectAtIndex:resolvedIndex];
-  if (resolvedIndex < _itemHeights.count) {
-    [_itemHeights removeObjectAtIndex:resolvedIndex];
-  }
+  [self rebuildMountedItemViewMap];
 
   if (!_isAnimatingNativeDelete) {
     [self reloadTableView];
@@ -432,8 +498,8 @@ static NSArray<EditableListSwipeAction *> *EditableListSwipeActionArrayFromVecto
 
 - (void)updateProps:(Props::Shared const &)props oldProps:(Props::Shared const &)oldProps
 {
-  const auto &oldViewProps = *std::static_pointer_cast<EditableListViewProps const>(_props);
-  const auto &newViewProps = *std::static_pointer_cast<EditableListViewProps const>(props);
+  const auto &oldViewProps = *std::static_pointer_cast<FluxListViewProps const>(_props);
+  const auto &newViewProps = *std::static_pointer_cast<FluxListViewProps const>(props);
   BOOL didUpdateSearch = NO;
   if (oldViewProps.searchEnabled != newViewProps.searchEnabled) {
     _searchEnabled = newViewProps.searchEnabled;
@@ -457,28 +523,48 @@ static NSArray<EditableListSwipeAction *> *EditableListSwipeActionArrayFromVecto
   }
   BOOL didUpdate = NO;
   if (oldViewProps.itemCount != newViewProps.itemCount) {
-    NSUInteger targetCount = newViewProps.itemCount < 0 ? 0 : (NSUInteger)newViewProps.itemCount;
-    [self resizeItemHeightsForCount:targetCount];
+    _itemCount = newViewProps.itemCount < 0 ? 0 : newViewProps.itemCount;
+    _lastEmittedVisibleFirst = NSNotFound;
+    _lastEmittedVisibleLast = NSNotFound;
+    didUpdate = YES;
+  }
+  if (newViewProps.estimatedItemHeight > 0.0 &&
+      fabs(_estimatedItemHeight - newViewProps.estimatedItemHeight) > 0.5) {
+    _estimatedItemHeight = newViewProps.estimatedItemHeight;
+    _tableView.estimatedRowHeight = _estimatedItemHeight;
+    didUpdate = YES;
+  }
+  if (!newViewProps.mountedRowIndices.empty()) {
+    NSMutableArray<NSNumber *> *nextMountedRows = [NSMutableArray new];
+    for (const auto rowValue : newViewProps.mountedRowIndices) {
+      [nextMountedRows addObject:@(rowValue)];
+    }
+    if (![_mountedRowIndices isEqualToArray:nextMountedRows]) {
+      _mountedRowIndices = nextMountedRows;
+      [self rebuildMountedItemViewMap];
+      didUpdate = YES;
+    }
+  } else if (_mountedRowIndices.count > 0) {
+    _mountedRowIndices = [NSMutableArray new];
+    [self rebuildMountedItemViewMap];
     didUpdate = YES;
   }
   if (!newViewProps.itemHeights.empty()) {
-    NSMutableArray<NSNumber *> *nextHeights = [_itemHeights mutableCopy] ?: [NSMutableArray new];
+    NSUInteger count = MIN(newViewProps.itemHeights.size(), _mountedRowIndices.count);
     BOOL didUpdateHeights = NO;
-    NSUInteger index = 0;
-    for (const auto height : newViewProps.itemHeights) {
-      if (height > 0.0) {
-        while (nextHeights.count <= index) {
-          [nextHeights addObject:@0];
-        }
-        if (nextHeights[index].doubleValue != height) {
-          nextHeights[index] = @(height);
-          didUpdateHeights = YES;
-        }
+    for (NSUInteger index = 0; index < count; index++) {
+      CGFloat height = newViewProps.itemHeights[index];
+      if (height <= 0.0) {
+        continue;
       }
-      index++;
+      NSNumber *row = _mountedRowIndices[index];
+      NSNumber *nextHeight = @(height);
+      if (![_itemHeightsByRow[row] isEqualToNumber:nextHeight]) {
+        _itemHeightsByRow[row] = nextHeight;
+        didUpdateHeights = YES;
+      }
     }
     if (didUpdateHeights) {
-      _itemHeights = nextHeights;
       didUpdate = YES;
     }
   }
@@ -499,12 +585,12 @@ static NSArray<EditableListSwipeAction *> *EditableListSwipeActionArrayFromVecto
   }
   const auto &swipeActions = newViewProps.swipeActions;
   if (!swipeActions.leading.empty()) {
-    _leadingSwipeActions = EditableListSwipeActionArrayFromVector(swipeActions.leading);
+    _leadingSwipeActions = FluxListSwipeActionArrayFromVector(swipeActions.leading);
   } else {
     _leadingSwipeActions = nil;
   }
   if (!swipeActions.trailing.empty()) {
-    _trailingSwipeActions = EditableListSwipeActionArrayFromVector(swipeActions.trailing);
+    _trailingSwipeActions = FluxListSwipeActionArrayFromVector(swipeActions.trailing);
   } else {
     _trailingSwipeActions = nil;
   }
@@ -519,23 +605,25 @@ static NSArray<EditableListSwipeAction *> *EditableListSwipeActionArrayFromVecto
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
 {
-  return _itemViews.count;
+  return _itemCount;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView
          cellForRowAtIndexPath:(NSIndexPath *)indexPath
 {
   UITableViewCell *cell =
-      [tableView dequeueReusableCellWithIdentifier:@"EditableListCell"
+      [tableView dequeueReusableCellWithIdentifier:@"FluxListCell"
                                       forIndexPath:indexPath];
-  if (indexPath.row >= _itemViews.count) {
+  UIView *itemView = [self mountedItemViewForRow:indexPath.row];
+  if (!itemView) {
     for (UIView *subview in cell.contentView.subviews) {
       [subview removeFromSuperview];
     }
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    cell.backgroundColor = UIColor.systemBackgroundColor;
+    cell.contentView.backgroundColor = UIColor.systemBackgroundColor;
     return cell;
   }
-  UIView *itemView = _itemViews[indexPath.row];
   CGFloat width = CGRectGetWidth(tableView.bounds);
   CGFloat height = [self rowHeightForIndex:indexPath.row
                                 itemView:itemView
@@ -565,7 +653,7 @@ static NSArray<EditableListSwipeAction *> *EditableListSwipeActionArrayFromVecto
 
 - (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath
 {
-  if (indexPath.row >= _itemViews.count) {
+  if (indexPath.row >= _itemCount) {
     return NO;
   }
   NSInteger itemIndex = [self itemIndexForRow:indexPath.row];
@@ -578,10 +666,10 @@ static NSArray<EditableListSwipeAction *> *EditableListSwipeActionArrayFromVecto
 - (CGFloat)tableView:(UITableView *)tableView
     heightForRowAtIndexPath:(NSIndexPath *)indexPath
 {
-  if (indexPath.row >= _itemViews.count) {
+  if (indexPath.row >= _itemCount) {
     return tableView.estimatedRowHeight > 0.0 ? tableView.estimatedRowHeight : 1.0;
   }
-  UIView *itemView = _itemViews[indexPath.row];
+  UIView *itemView = [self mountedItemViewForRow:indexPath.row];
   CGFloat height = [self rowHeightForIndex:indexPath.row
                                 itemView:itemView
                                tableView:tableView];
@@ -601,9 +689,15 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath
   return [self swipeActionsConfigurationForRow:indexPath.row isLeading:NO];
 }
 
+- (void)scrollViewDidScroll:(UIScrollView *)scrollView
+{
+  (void)scrollView;
+  [self emitVisibleRangeIfNeeded];
+}
+
 - (NSInteger)itemIndexForRow:(NSInteger)row
 {
-  if (_rowItemIndices && row < _rowItemIndices.count) {
+  if (_rowItemIndices && _rowItemIndices.count == _itemCount && row < _rowItemIndices.count) {
     return _rowItemIndices[row].integerValue;
   }
   return row;
@@ -612,7 +706,7 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath
 - (UISwipeActionsConfiguration *)swipeActionsConfigurationForRow:(NSInteger)row
                                                        isLeading:(BOOL)isLeading
 {
-  NSArray<EditableListSwipeAction *> *actions =
+  NSArray<FluxListSwipeAction *> *actions =
       isLeading ? _leadingSwipeActions : _trailingSwipeActions;
   if (actions.count == 0) {
     return nil;
@@ -623,14 +717,14 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath
     return nil;
   }
 
-  NSArray<EditableListSwipeAction *> *orderedActions = actions;
+  NSArray<FluxListSwipeAction *> *orderedActions = actions;
   // Allow native full-swipe for the first action on each side.
   // Delete keeps its custom handling below.
   BOOL allowsFullSwipeFirstAction = actions.count > 0;
   if (!isLeading) {
     NSInteger deleteActionIndex = NSNotFound;
     for (NSInteger index = 0; index < actions.count; index++) {
-      if (EditableListShouldAnimateDeleteAction(actions[(NSUInteger)index])) {
+      if (FluxListShouldAnimateDeleteAction(actions[(NSUInteger)index])) {
         deleteActionIndex = index;
         break;
       }
@@ -638,8 +732,8 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath
     if (deleteActionIndex != NSNotFound) {
       allowsFullSwipeFirstAction = YES;
       if (deleteActionIndex != 0) {
-        NSMutableArray<EditableListSwipeAction *> *mutableActions = [actions mutableCopy];
-        EditableListSwipeAction *deleteAction = mutableActions[(NSUInteger)deleteActionIndex];
+        NSMutableArray<FluxListSwipeAction *> *mutableActions = [actions mutableCopy];
+        FluxListSwipeAction *deleteAction = mutableActions[(NSUInteger)deleteActionIndex];
         [mutableActions removeObjectAtIndex:(NSUInteger)deleteActionIndex];
         [mutableActions insertObject:deleteAction atIndex:0];
         orderedActions = mutableActions;
@@ -648,14 +742,14 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath
   }
 
   NSMutableArray<UIContextualAction *> *contextualActions = [NSMutableArray new];
-  EditableListViewEventEmitter::OnSwipeActionSide side =
-      isLeading ? EditableListViewEventEmitter::OnSwipeActionSide::Leading
-                : EditableListViewEventEmitter::OnSwipeActionSide::Trailing;
-  for (EditableListSwipeAction *action in orderedActions) {
+  FluxListViewEventEmitter::OnSwipeActionSide side =
+      isLeading ? FluxListViewEventEmitter::OnSwipeActionSide::Leading
+                : FluxListViewEventEmitter::OnSwipeActionSide::Trailing;
+  for (FluxListSwipeAction *action in orderedActions) {
     UIContextualActionStyle style =
         action.destructive ? UIContextualActionStyleDestructive : UIContextualActionStyleNormal;
-    UIColor *backgroundColor = EditableListResolvedActionBackgroundColor(action);
-    UIColor *foregroundColor = EditableListForegroundColorForBackground(backgroundColor);
+    UIColor *backgroundColor = FluxListResolvedActionBackgroundColor(action);
+    UIColor *foregroundColor = FluxListForegroundColorForBackground(backgroundColor);
     BOOL shouldUseCombinedIconTitleImage = NO;
     if (action.icon && action.title.length > 0) {
       if (@available(iOS 26.0, *)) {
@@ -672,11 +766,9 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath
                                                   UIContextualAction * _Nonnull actionObj,
                                                   UIView * _Nonnull sourceView,
                                                   void (^ _Nonnull completionHandler)(BOOL)) {
-        if (EditableListShouldAnimateDeleteAction(action)) {
+        if (FluxListShouldAnimateDeleteAction(action)) {
           UIView *pendingDeleteView = nil;
-          if (row >= 0 && row < _itemViews.count) {
-            pendingDeleteView = _itemViews[row];
-          }
+          pendingDeleteView = [self mountedItemViewForRow:row];
           if (!pendingDeleteView) {
             completionHandler(YES);
             [self emitSwipeActionWithKey:action.key
@@ -734,7 +826,7 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath
                                 renderingMode:UIImageRenderingModeAlwaysOriginal];
           if (shouldUseCombinedIconTitleImage) {
             UIImage *combinedImage =
-                EditableListCombinedIconTitleImage(tintedSymbolImage, action.title, foregroundColor);
+                FluxListCombinedIconTitleImage(tintedSymbolImage, action.title, foregroundColor);
             contextualAction.image = combinedImage ?: tintedSymbolImage;
           } else {
             contextualAction.image = tintedSymbolImage;
@@ -774,19 +866,19 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath
 - (void)emitSwipeActionWithKey:(NSString *)key
                       rowIndex:(NSInteger)rowIndex
                      itemIndex:(NSInteger)itemIndex
-                          side:(EditableListViewEventEmitter::OnSwipeActionSide)side
+                          side:(FluxListViewEventEmitter::OnSwipeActionSide)side
 {
   if (!_eventEmitter) {
     return;
   }
 
   auto eventEmitter =
-      std::static_pointer_cast<const EditableListViewEventEmitter>(_eventEmitter);
+      std::static_pointer_cast<const FluxListViewEventEmitter>(_eventEmitter);
   if (!eventEmitter) {
     return;
   }
 
-  EditableListViewEventEmitter::OnSwipeAction event = {
+  FluxListViewEventEmitter::OnSwipeAction event = {
       .actionKey = std::string([key UTF8String]),
       .index = static_cast<int>(itemIndex),
       .row = static_cast<int>(rowIndex),
@@ -802,13 +894,13 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath
   }
 
   auto eventEmitter =
-      std::static_pointer_cast<const EditableListViewEventEmitter>(_eventEmitter);
+      std::static_pointer_cast<const FluxListViewEventEmitter>(_eventEmitter);
   if (!eventEmitter) {
     return;
   }
 
   NSString *safeQuery = query ?: @"";
-  EditableListViewEventEmitter::OnSearchChange event = {
+  FluxListViewEventEmitter::OnSearchChange event = {
       .query = std::string([safeQuery UTF8String]),
   };
   eventEmitter->onSearchChange(event);
@@ -817,13 +909,14 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath
 - (CGFloat)tableView:(UITableView *)tableView
 estimatedHeightForRowAtIndexPath:(NSIndexPath *)indexPath
 {
-  if (indexPath.row < _itemHeights.count) {
-    CGFloat height = _itemHeights[indexPath.row].doubleValue;
+  NSNumber *heightNumber = _itemHeightsByRow[@(indexPath.row)];
+  if (heightNumber) {
+    CGFloat height = heightNumber.doubleValue;
     if (height > 0.0) {
       return height;
     }
   }
-  return tableView.estimatedRowHeight;
+  return _estimatedItemHeight > 0.0 ? _estimatedItemHeight : tableView.estimatedRowHeight;
 }
 
 - (CGFloat)rowHeightForIndex:(NSInteger)index
@@ -831,14 +924,18 @@ estimatedHeightForRowAtIndexPath:(NSIndexPath *)indexPath
                    tableView:(UITableView *)tableView
 {
   CGFloat height = 0.0;
-  if (index < _itemHeights.count) {
-    height = _itemHeights[index].doubleValue;
+  NSNumber *heightNumber = _itemHeightsByRow[@(index)];
+  if (heightNumber) {
+    height = heightNumber.doubleValue;
   }
-  if (height <= 0.0) {
+  if (height <= 0.0 && itemView) {
     height = CGRectGetHeight(itemView.bounds);
   }
   if (height <= 0.0) {
-    height = tableView.estimatedRowHeight > 0.0 ? tableView.estimatedRowHeight : 1.0;
+    height = _estimatedItemHeight > 0.0 ? _estimatedItemHeight : tableView.estimatedRowHeight;
+  }
+  if (height <= 0.0) {
+    height = 1.0;
   }
 
   return height;

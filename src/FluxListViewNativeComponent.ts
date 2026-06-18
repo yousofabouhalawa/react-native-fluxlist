@@ -3,7 +3,7 @@ import {
   type ColorValue,
   type ViewProps,
 } from 'react-native';
-import type { Int32 } from 'react-native/Libraries/Types/CodegenTypes';
+import type { Double, Int32 } from 'react-native/Libraries/Types/CodegenTypes';
 import type { DirectEventHandler } from 'react-native/Libraries/Types/CodegenTypes';
 
 type SwipeAction = {
@@ -16,7 +16,9 @@ type SwipeAction = {
 
 interface NativeProps extends ViewProps {
   itemCount: Int32;
+  estimatedItemHeight?: Double;
   itemHeights?: ReadonlyArray<number>;
+  mountedRowIndices?: ReadonlyArray<Int32>;
   rowItemIndices?: ReadonlyArray<Int32>;
   searchEnabled?: boolean;
   searchPlaceholder?: string;
@@ -27,6 +29,10 @@ interface NativeProps extends ViewProps {
   onSearchChange?: DirectEventHandler<{
     query: string;
   }>;
+  onVisibleRangeChange?: DirectEventHandler<{
+    first: Int32;
+    last: Int32;
+  }>;
   onSwipeAction?: DirectEventHandler<{
     actionKey: string;
     index: Int32;
@@ -35,4 +41,4 @@ interface NativeProps extends ViewProps {
   }>;
 }
 
-export default codegenNativeComponent<NativeProps>('EditableListView');
+export default codegenNativeComponent<NativeProps>('FluxListView');

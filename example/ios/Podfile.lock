@@ -1,7 +1,9 @@
 PODS:
   - boost (1.84.0)
   - DoubleConversion (1.1.6)
-  - EditableList (0.1.0):
+  - fast_float (8.0.0)
+  - FBLazyVector (0.83.0)
+  - FluxList (0.1.0):
     - boost
     - DoubleConversion
     - fast_float
@@ -29,8 +31,6 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
-  - fast_float (8.0.0)
-  - FBLazyVector (0.83.0)
   - fmt (11.0.2)
   - glog (0.3.5)
   - hermes-engine (0.14.0):
@@ -2483,9 +2483,9 @@ PODS:
 DEPENDENCIES:
   - boost (from `../node_modules/react-native/third-party-podspecs/boost.podspec`)
   - DoubleConversion (from `../node_modules/react-native/third-party-podspecs/DoubleConversion.podspec`)
-  - EditableList (from `../..`)
   - fast_float (from `../node_modules/react-native/third-party-podspecs/fast_float.podspec`)
   - FBLazyVector (from `../node_modules/react-native/Libraries/FBLazyVector`)
+  - FluxList (from `../..`)
   - fmt (from `../node_modules/react-native/third-party-podspecs/fmt.podspec`)
   - glog (from `../node_modules/react-native/third-party-podspecs/glog.podspec`)
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
@@ -2571,12 +2571,12 @@ EXTERNAL SOURCES:
     :podspec: "../node_modules/react-native/third-party-podspecs/boost.podspec"
   DoubleConversion:
     :podspec: "../node_modules/react-native/third-party-podspecs/DoubleConversion.podspec"
-  EditableList:
-    :path: "../.."
   fast_float:
     :podspec: "../node_modules/react-native/third-party-podspecs/fast_float.podspec"
   FBLazyVector:
     :path: "../node_modules/react-native/Libraries/FBLazyVector"
+  FluxList:
+    :path: "../.."
   fmt:
     :podspec: "../node_modules/react-native/third-party-podspecs/fmt.podspec"
   glog:
@@ -2728,9 +2728,9 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   boost: 7e761d76ca2ce687f7cc98e698152abd03a18f90
   DoubleConversion: cb417026b2400c8f53ae97020b2be961b59470cb
-  EditableList: ee360d1cfa9e1db54ebe55655436be9f322048c2
   fast_float: b32c788ed9c6a8c584d114d0047beda9664e7cc6
   FBLazyVector: a293a88992c4c33f0aee184acab0b64a08ff9458
+  FluxList: 8398ce7cd2f2ad13570a1a12eaf93c2dda04e7c2
   fmt: a40bb5bd0294ea969aaaba240a927bd33d878cdd
   glog: 5683914934d5b6e4240e497e0f4a3b42d1854183
   hermes-engine: cd17e7133e1b8208c1a1e6e53cb8a0ebb69edd80
@@ -2806,6 +2806,6 @@ SPEC CHECKSUMS:
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   Yoga: 6ca93c8c13f56baeec55eb608577619b17a4d64e
 
-PODFILE CHECKSUM: f3fd3e5ff941614789219ad94fc3e383500ae541
+PODFILE CHECKSUM: 051a457e4fc9423391e4edb1192a674d04bab48b
 
 COCOAPODS: 1.16.2

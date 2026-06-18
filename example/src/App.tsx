@@ -1,674 +1,341 @@
-import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { EditableListView } from 'react-native-editable-list';
+import { memo, useMemo } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { FluxListView } from 'react-native-fluxlist';
 
-type DemoKey = 'messages' | 'largeNoVirt' | 'largeVirt' | 'tasks';
+const ITEM_COUNT = 100_000;
+const CARD_HEIGHT = 412;
+const MEDIA_TILES = Array.from({ length: 18 }, (_, index) => index);
+const DATA = Array.from({ length: ITEM_COUNT }, (_, index) => index);
 
-type Message = {
-  id: string;
-  sender: string;
-  preview: string;
-  time: string;
-  unread: boolean;
-  pinned: boolean;
-  selected: boolean;
-};
-
-type BigItem = {
-  id: string;
-  title: string;
-  detail: string;
-};
-
-type TaskItem = {
-  id: string;
-  title: string;
-  context: string;
-  done: boolean;
-  flagged: boolean;
-};
-
-const DEMOS: Array<{ key: DemoKey; label: string }> = [
-  { key: 'messages', label: 'Messages' },
-  { key: 'largeNoVirt', label: 'Large No Virt' },
-  { key: 'largeVirt', label: 'Large Virt On' },
-  { key: 'tasks', label: 'Tasks' },
+const AUTHORS = [
+  'Mira Chen',
+  'Design Systems',
+  'Noah Patel',
+  'Motion Lab',
+  'Ava Studio',
+  'Field Notes',
+  'Product Ops',
+  'Nora Vale',
 ];
 
-const PEOPLE = [
-  'Ava',
-  'Liam',
-  'Noah',
-  'Mia',
-  'Nora',
-  'Alex',
-  'Sam',
-  'Mom',
-  'Design Team',
-  'Support',
-  'Ops',
-  'Product',
+const LOCATIONS = [
+  'Tokyo',
+  'Cairo',
+  'Berlin',
+  'New York',
+  'Lisbon',
+  'Seoul',
+  'San Francisco',
+  'Dubai',
 ];
 
-const PREVIEWS = [
-  'Can we move dinner to 8? I got stuck at work.',
-  'Updated mockups are ready for review.',
-  'I booked the table for 7:30.',
-  'Reminder: class starts in 30 minutes.',
-  'Please review the release checklist.',
-  'Call me when you leave the office.',
-  'Build passed on CI, shipping now.',
-  'Shared the latest notes in the channel.',
+const CAPTIONS = [
+  'Layered media, dense metadata, and fast gesture surfaces in one reusable card.',
+  'A brutal feed row built to make bad virtualization obvious during fast scrolls.',
+  'Synthetic photos, badges, counters, shadows, and text blocks with stable height.',
+  'The list owns 100k rows while React only mounts a compact native-driven window.',
 ];
 
-const TIMES = ['9:41 AM', '11:08 AM', 'Yesterday', 'Tue', 'Mon', 'Sun'];
+const COLORS = [
+  '#E64A5F',
+  '#FFB84D',
+  '#35C2A1',
+  '#3478F6',
+  '#7C5CFF',
+  '#111827',
+  '#F4F0E6',
+  '#2F6F73',
+  '#D8A31A',
+  '#A43D2F',
+];
 
-function createMessages(count: number): Message[] {
-  return Array.from({ length: count }, (_, index) => {
-    const sender = PEOPLE[index % PEOPLE.length];
-    return {
-      id: `msg-${index}`,
-      sender,
-      preview: PREVIEWS[index % PREVIEWS.length],
-      time: TIMES[index % TIMES.length],
-      unread: index % 3 === 0,
-      pinned: index % 11 === 0,
-      selected: false,
-    };
-  });
-}
-
-function createBigItems(prefix: string, count: number): BigItem[] {
-  return Array.from({ length: count }, (_, index) => ({
-    id: `${prefix}-${index}`,
-    title: `Record ${index + 1}`,
-    detail: `Synthetic row for performance checks #${index + 1}`,
-  }));
-}
-
-function createTasks(count: number): TaskItem[] {
-  return Array.from({ length: count }, (_, index) => ({
-    id: `task-${index}`,
-    title: `Task ${index + 1}`,
-    context: `Sprint ${Math.floor(index / 10) + 1} · Owner ${(index % 5) + 1}`,
-    done: false,
-    flagged: index % 7 === 0,
-  }));
+function pick(values: string[], seed: number) {
+  return values[Math.abs(seed) % values.length]!;
 }
 
 function initials(name: string) {
-  const parts = name.split(' ').filter(Boolean);
-  const first = parts[0]?.[0]?.toUpperCase();
-  const second =
-    parts.length > 1 ? parts[parts.length - 1]?.[0]?.toUpperCase() : '';
-  return `${first ?? '?'}${second ?? ''}`;
+  return name
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 }
 
-export default function App() {
-  const [activeDemo, setActiveDemo] = useState<DemoKey>('messages');
-  const [messageQuery, setMessageQuery] = useState('');
-  const [taskQuery, setTaskQuery] = useState('');
-  const [messages, setMessages] = useState<Message[]>(() =>
-    createMessages(220)
-  );
-  const [largeNoVirtItems, setLargeNoVirtItems] = useState<BigItem[]>(() =>
-    createBigItems('no-virt', 2200)
-  );
-  const [largeVirtItems, setLargeVirtItems] = useState<BigItem[]>(() =>
-    createBigItems('virt', 2200)
-  );
-  const [tasks, setTasks] = useState<TaskItem[]>(() => createTasks(300));
-
-  const filteredMessages = useMemo(() => {
-    const q = messageQuery.trim().toLowerCase();
-    if (!q) {
-      return messages;
-    }
-    return messages.filter((item) => {
-      return (
-        item.sender.toLowerCase().includes(q) ||
-        item.preview.toLowerCase().includes(q)
-      );
-    });
-  }, [messageQuery, messages]);
-
-  const filteredTasks = useMemo(() => {
-    const q = taskQuery.trim().toLowerCase();
-    if (!q) {
-      return tasks;
-    }
-    return tasks.filter((task) => {
-      return (
-        task.title.toLowerCase().includes(q) ||
-        task.context.toLowerCase().includes(q)
-      );
-    });
-  }, [taskQuery, tasks]);
-
-  const renderMessagesDemo = () => {
-    return (
-      <EditableListView
-        data={filteredMessages}
-        keyExtractor={(item) => item.id}
-        searchEnabled
-        searchPlaceholder="Search messages"
-        onSearchChange={({ nativeEvent }) => setMessageQuery(nativeEvent.query)}
-        swipeActions={{
-          leading: [
-            {
-              key: 'togglePin',
-              title: 'Pin',
-              color: '#3A3A3C',
-              icon: 'pin.fill',
-            },
-          ],
-          trailing: [
-            {
-              key: 'toggleSelect',
-              title: 'Select',
-              color: '#8E8E93',
-              icon: 'checkmark.circle.fill',
-            },
-            {
-              key: 'delete',
-              title: 'Delete',
-              color: '#FF2D55',
-              icon: 'trash.fill',
-              destructive: true,
-            },
-          ],
-        }}
-        onSwipeAction={({ nativeEvent }) => {
-          const row = nativeEvent.index;
-          if (row < 0 || row >= filteredMessages.length) {
-            return;
-          }
-          const target = filteredMessages[row];
-          if (!target) {
-            return;
-          }
-          if (nativeEvent.actionKey === 'delete') {
-            setMessages((prev) => prev.filter((item) => item.id !== target.id));
-            return;
-          }
-          setMessages((prev) =>
-            prev.map((item) => {
-              if (item.id !== target.id) {
-                return item;
-              }
-              if (nativeEvent.actionKey === 'togglePin') {
-                return { ...item, pinned: !item.pinned };
-              }
-              if (nativeEvent.actionKey === 'toggleSelect') {
-                return { ...item, selected: !item.selected };
-              }
-              return item;
-            })
-          );
-        }}
-        renderItem={({ item }) => (
-          <View style={styles.messageRow}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{initials(item.sender)}</Text>
-            </View>
-            <View style={styles.messageMain}>
-              <View style={styles.messageTopLine}>
-                <Text
-                  style={[
-                    styles.messageName,
-                    item.unread && styles.messageUnread,
-                  ]}
-                >
-                  {item.sender}
-                </Text>
-                <Text style={styles.messageTime}>{item.time}</Text>
-              </View>
-              <Text style={styles.messagePreview} numberOfLines={1}>
-                {item.pinned ? 'Pinned · ' : ''}
-                {item.preview}
-              </Text>
-            </View>
-            <View style={styles.messageMeta}>
-              {item.unread ? <View style={styles.unreadDot} /> : null}
-              {item.selected ? <View style={styles.selectedDot} /> : null}
-            </View>
-          </View>
-        )}
-        style={styles.list}
-      />
-    );
-  };
-
-  const renderLargeNoVirtualizationDemo = () => {
-    return (
-      <EditableListView
-        data={largeNoVirtItems}
-        keyExtractor={(item) => item.id}
-        swipeActions={{
-          trailing: [
-            {
-              key: 'delete',
-              title: 'Delete',
-              color: '#FF3B30',
-              icon: 'trash.fill',
-              destructive: true,
-            },
-          ],
-        }}
-        onSwipeAction={({ nativeEvent }) => {
-          if (nativeEvent.actionKey !== 'delete') {
-            return;
-          }
-          const target = largeNoVirtItems[nativeEvent.index];
-          if (!target) {
-            return;
-          }
-          setLargeNoVirtItems((prev) => {
-            return prev.filter((item) => item.id !== target.id);
-          });
-        }}
-        renderItem={({ item, index }) => (
-          <View style={styles.bigRow}>
-            <Text style={styles.bigTitle}>{item.title}</Text>
-            <Text style={styles.bigDetail} numberOfLines={1}>
-              {item.detail}
-            </Text>
-            <Text style={styles.bigTag}>Row {index + 1}</Text>
-          </View>
-        )}
-        style={styles.list}
-      />
-    );
-  };
-
-  const renderLargeVirtualizationDemo = () => {
-    return (
-      <EditableListView
-        data={largeVirtItems}
-        keyExtractor={(item) => item.id}
-        virtualization={{
-          enabled: true,
-          initialNumToRender: 24,
-          maxToRenderPerBatch: 16,
-          updateCellsBatchingPeriod: 72,
-        }}
-        swipeActions={{
-          trailing: [
-            {
-              key: 'delete',
-              title: 'Delete',
-              color: '#FF3B30',
-              icon: 'trash.fill',
-              destructive: true,
-            },
-          ],
-        }}
-        onSwipeAction={({ nativeEvent }) => {
-          if (nativeEvent.actionKey !== 'delete') {
-            return;
-          }
-          const target = largeVirtItems[nativeEvent.index];
-          if (!target) {
-            return;
-          }
-          setLargeVirtItems((prev) => {
-            return prev.filter((item) => item.id !== target.id);
-          });
-        }}
-        renderItem={({ item, index }) => (
-          <View style={styles.bigRow}>
-            <Text style={styles.bigTitle}>{item.title}</Text>
-            <Text style={styles.bigDetail} numberOfLines={1}>
-              {item.detail}
-            </Text>
-            <Text style={styles.bigTag}>Row {index + 1}</Text>
-          </View>
-        )}
-        style={styles.list}
-      />
-    );
-  };
-
-  const renderTasksDemo = () => {
-    return (
-      <EditableListView
-        data={filteredTasks}
-        keyExtractor={(item) => item.id}
-        searchEnabled
-        searchPlaceholder="Search tasks"
-        onSearchChange={({ nativeEvent }) => setTaskQuery(nativeEvent.query)}
-        swipeActions={{
-          leading: [
-            {
-              key: 'toggleFlag',
-              title: 'Flag',
-              color: '#FF9F0A',
-              icon: 'flag.fill',
-            },
-          ],
-          trailing: [
-            {
-              key: 'toggleDone',
-              title: 'Done',
-              color: '#30D158',
-              icon: 'checkmark',
-            },
-            {
-              key: 'delete',
-              title: 'Delete',
-              color: '#FF3B30',
-              icon: 'trash.fill',
-              destructive: true,
-            },
-          ],
-        }}
-        onSwipeAction={({ nativeEvent }) => {
-          const row = nativeEvent.index;
-          if (row < 0 || row >= filteredTasks.length) {
-            return;
-          }
-          const target = filteredTasks[row];
-          if (!target) {
-            return;
-          }
-          if (nativeEvent.actionKey === 'delete') {
-            setTasks((prev) => prev.filter((task) => task.id !== target.id));
-            return;
-          }
-          setTasks((prev) =>
-            prev.map((task) => {
-              if (task.id !== target.id) {
-                return task;
-              }
-              if (nativeEvent.actionKey === 'toggleDone') {
-                return { ...task, done: !task.done };
-              }
-              if (nativeEvent.actionKey === 'toggleFlag') {
-                return { ...task, flagged: !task.flagged };
-              }
-              return task;
-            })
-          );
-        }}
-        renderItem={({ item }) => (
-          <View style={styles.taskRow}>
-            <View style={[styles.taskStatus, item.done && styles.taskDone]} />
-            <View style={styles.taskMain}>
-              <Text
-                style={[styles.taskTitle, item.done && styles.taskTitleDone]}
-              >
-                {item.title}
-              </Text>
-              <Text style={styles.taskContext}>{item.context}</Text>
-            </View>
-            {item.flagged ? <Text style={styles.taskFlag}>FLAG</Text> : null}
-          </View>
-        )}
-        style={styles.list}
-      />
-    );
-  };
-
-  const activeInfo = useMemo(() => {
-    if (activeDemo === 'messages') {
-      return `Messages demo · ${filteredMessages.length} rows`;
-    }
-    if (activeDemo === 'largeNoVirt') {
-      return `Large list demo (virtualization off) · ${largeNoVirtItems.length} rows`;
-    }
-    if (activeDemo === 'largeVirt') {
-      return `Large list demo (virtualization on) · ${largeVirtItems.length} rows`;
-    }
-    return `Tasks demo · ${filteredTasks.length} rows`;
-  }, [
-    activeDemo,
-    filteredMessages.length,
-    largeNoVirtItems.length,
-    largeVirtItems.length,
-    filteredTasks.length,
-  ]);
+const FeedCard = memo(function FeedCard({ index }: { index: number }) {
+  const author = pick(AUTHORS, index);
+  const location = pick(LOCATIONS, index * 7);
+  const caption = pick(CAPTIONS, index * 13);
+  const accent = pick(COLORS, index * 3);
+  const dark = pick(COLORS, index * 5 + 1);
+  const likes = 12_400 + ((index * 48271) % 812_000);
+  const comments = 80 + ((index * 977) % 8_900);
+  const saves = 20 + ((index * 313) % 4_400);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>EditableListView Examples</Text>
-        <Text style={styles.subtitle}>{activeInfo}</Text>
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <View style={[styles.avatar, { backgroundColor: accent }]}>
+          <Text style={styles.avatarText}>{initials(author)}</Text>
+        </View>
+        <View style={styles.identity}>
+          <Text style={styles.author}>{author}</Text>
+          <Text style={styles.location}>
+            {location} / frame {index + 1}
+          </Text>
+        </View>
+        <View style={styles.livePill}>
+          <Text style={styles.liveText}>LIVE</Text>
+        </View>
       </View>
 
-      <ScrollView
-        horizontal
-        style={styles.selectorScroll}
-        contentContainerStyle={styles.selectorContent}
-        showsHorizontalScrollIndicator={false}
-      >
-        {DEMOS.map((demo) => (
-          <Pressable
-            key={demo.key}
-            onPress={() => setActiveDemo(demo.key)}
-            style={[
-              styles.selectorButton,
-              activeDemo === demo.key && styles.selectorButtonActive,
-            ]}
-          >
-            <Text
+      <View style={[styles.media, { backgroundColor: dark }]}>
+        {MEDIA_TILES.map((tile) => {
+          const color = pick(COLORS, index + tile * 11);
+          return (
+            <View
+              key={tile}
               style={[
-                styles.selectorText,
-                activeDemo === demo.key && styles.selectorTextActive,
+                styles.mediaTile,
+                {
+                  backgroundColor: color,
+                  left: `${(tile % 6) * 16.66}%`,
+                  top: `${Math.floor(tile / 6) * 33.33}%`,
+                },
               ]}
-            >
-              {demo.label}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
-
-      <View style={styles.content}>
-        {activeDemo === 'messages' && renderMessagesDemo()}
-        {activeDemo === 'largeNoVirt' && renderLargeNoVirtualizationDemo()}
-        {activeDemo === 'largeVirt' && renderLargeVirtualizationDemo()}
-        {activeDemo === 'tasks' && renderTasksDemo()}
+            />
+          );
+        })}
+        <View style={styles.mediaOverlay}>
+          <Text style={styles.playIcon}>PLAY</Text>
+          <Text style={styles.mediaLabel}>4K synthetic media stack</Text>
+        </View>
+        <View style={styles.progressTrack}>
+          <View
+            style={[
+              styles.progressFill,
+              { width: `${18 + (index % 78)}%`, backgroundColor: accent },
+            ]}
+          />
+        </View>
       </View>
+
+      <View style={styles.metrics}>
+        <Text style={styles.metric}>{likes.toLocaleString()} likes</Text>
+        <Text style={styles.metric}>{comments.toLocaleString()} comments</Text>
+        <Text style={styles.metric}>{saves.toLocaleString()} saves</Text>
+      </View>
+
+      <Text style={styles.caption} numberOfLines={2}>
+        {caption}
+      </Text>
+
+      <View style={styles.footer}>
+        <View style={styles.footerBar} />
+        <View style={[styles.footerBar, styles.footerBarShort]} />
+        <Text style={styles.rowNumber}>
+          #{String(index + 1).padStart(6, '0')}
+        </Text>
+      </View>
+    </View>
+  );
+});
+
+export default function App() {
+  const data = useMemo(() => DATA, []);
+
+  return (
+    <View style={styles.screen}>
+      <View style={styles.header}>
+        <Text style={styles.title}>FluxList Stress Feed</Text>
+        <Text style={styles.subtitle}>
+          {ITEM_COUNT.toLocaleString()} fixed-height media rows / native
+          windowing
+        </Text>
+      </View>
+
+      <FluxListView
+        data={data}
+        keyExtractor={(item) => `feed-${item}`}
+        virtualization={{
+          enabled: true,
+          estimatedItemHeight: CARD_HEIGHT,
+          fixedItemHeight: CARD_HEIGHT,
+          initialNumToRender: 18,
+          overscan: 10,
+          windowSize: 32,
+        }}
+        renderItem={({ item }) => <FeedCard index={item} />}
+        style={styles.list}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#E9EDF2',
   },
   header: {
-    paddingTop: 56,
+    paddingTop: 54,
     paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingBottom: 12,
     backgroundColor: '#FFFFFF',
+    borderBottomColor: '#CBD3DD',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#D1D1D6',
   },
   title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#111111',
+    color: '#111827',
+    fontSize: 24,
+    fontWeight: '800',
   },
   subtitle: {
+    color: '#526070',
+    fontSize: 13,
     marginTop: 4,
-    fontSize: 13,
-    color: '#6E6E73',
-  },
-  selectorScroll: {
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#D1D1D6',
-    flexGrow: 0,
-    flexShrink: 0,
-  },
-  selectorContent: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 8,
-  },
-  selectorButton: {
-    height: 32,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#C7C7CC',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-  selectorButtonActive: {
-    backgroundColor: '#111111',
-    borderColor: '#111111',
-  },
-  selectorText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#222222',
-  },
-  selectorTextActive: {
-    color: '#FFFFFF',
-  },
-  content: {
-    flex: 1,
-    minHeight: 0,
   },
   list: {
     flex: 1,
-    width: '100%',
-    height: '100%',
   },
-  messageRow: {
-    height: 82,
-    paddingHorizontal: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#D1D1D6',
-    flexDirection: 'row',
-    alignItems: 'center',
+  card: {
+    height: CARD_HEIGHT,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 14,
     backgroundColor: '#FFFFFF',
+    borderBottomColor: '#D8E0EA',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  cardHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    height: 48,
   },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#E5E5EA',
     alignItems: 'center',
+    borderRadius: 20,
+    height: 40,
     justifyContent: 'center',
-    marginRight: 12,
+    width: 40,
   },
   avatarText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1C1C1E',
-  },
-  messageMain: {
-    flex: 1,
-  },
-  messageTopLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 2,
-  },
-  messageName: {
-    fontSize: 17,
-    color: '#1C1C1E',
-  },
-  messageUnread: {
-    fontWeight: '700',
-  },
-  messageTime: {
-    marginLeft: 'auto',
+    color: '#FFFFFF',
     fontSize: 13,
-    color: '#8E8E93',
+    fontWeight: '800',
   },
-  messagePreview: {
+  identity: {
+    flex: 1,
+    paddingLeft: 10,
+  },
+  author: {
+    color: '#111827',
     fontSize: 15,
-    color: '#636366',
+    fontWeight: '800',
   },
-  messageMeta: {
-    width: 20,
+  location: {
+    color: '#667085',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  livePill: {
     alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 8,
-    gap: 6,
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
+    backgroundColor: '#111827',
     borderRadius: 4,
-    backgroundColor: '#007AFF',
+    height: 24,
+    justifyContent: 'center',
+    paddingHorizontal: 8,
   },
-  selectedDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: '#111111',
-  },
-  bigRow: {
-    minHeight: 68,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#D1D1D6',
-    backgroundColor: '#FFFFFF',
-  },
-  bigTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111111',
-  },
-  bigDetail: {
-    marginTop: 2,
-    fontSize: 13,
-    color: '#636366',
-  },
-  bigTag: {
-    marginTop: 6,
+  liveText: {
+    color: '#FFFFFF',
     fontSize: 11,
-    color: '#8E8E93',
+    fontWeight: '800',
   },
-  taskRow: {
-    height: 74,
-    paddingHorizontal: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#D1D1D6',
-    backgroundColor: '#FFFFFF',
-    flexDirection: 'row',
+  media: {
+    borderRadius: 8,
+    height: 226,
+    marginTop: 10,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  mediaTile: {
+    height: '34%',
+    opacity: 0.92,
+    position: 'absolute',
+    width: '17%',
+  },
+  mediaOverlay: {
     alignItems: 'center',
-    gap: 10,
+    bottom: 18,
+    flexDirection: 'row',
+    left: 14,
+    position: 'absolute',
+    right: 14,
   },
-  taskStatus: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: '#8E8E93',
-  },
-  taskDone: {
-    borderColor: '#30D158',
-    backgroundColor: '#30D158',
-  },
-  taskMain: {
-    flex: 1,
-  },
-  taskTitle: {
-    fontSize: 16,
-    color: '#111111',
-    fontWeight: '600',
-  },
-  taskTitleDone: {
-    textDecorationLine: 'line-through',
-    color: '#8E8E93',
-  },
-  taskContext: {
-    marginTop: 2,
-    fontSize: 13,
-    color: '#6E6E73',
-  },
-  taskFlag: {
+  playIcon: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 4,
+    color: '#111827',
     fontSize: 11,
+    fontWeight: '900',
+    overflow: 'hidden',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  mediaLabel: {
+    color: '#FFFFFF',
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '800',
+    marginLeft: 10,
+  },
+  progressTrack: {
+    backgroundColor: 'rgba(255,255,255,0.34)',
+    bottom: 0,
+    height: 5,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+  },
+  progressFill: {
+    height: 5,
+  },
+  metrics: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  metric: {
+    color: '#111827',
+    fontSize: 12,
     fontWeight: '700',
-    color: '#FF9F0A',
+  },
+  caption: {
+    color: '#293241',
+    fontSize: 14,
+    lineHeight: 19,
+    marginTop: 8,
+  },
+  footer: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    marginTop: 12,
+  },
+  footerBar: {
+    backgroundColor: '#D0D7E2',
+    borderRadius: 3,
+    height: 6,
+    marginRight: 8,
+    width: 72,
+  },
+  footerBarShort: {
+    width: 42,
+  },
+  rowNumber: {
+    color: '#667085',
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'right',
   },
 });

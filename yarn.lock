@@ -10027,9 +10027,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-native-editable-list-example@workspace:example":
+"react-native-fluxlist-example@workspace:example":
   version: 0.0.0-use.local
-  resolution: "react-native-editable-list-example@workspace:example"
+  resolution: "react-native-fluxlist-example@workspace:example"
   dependencies:
     "@babel/core": "npm:^7.25.2"
     "@babel/preset-env": "npm:^7.25.3"
@@ -10048,9 +10048,9 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"react-native-editable-list@workspace:.":
+"react-native-fluxlist@workspace:.":
   version: 0.0.0-use.local
-  resolution: "react-native-editable-list@workspace:."
+  resolution: "react-native-fluxlist@workspace:."
   dependencies:
     "@commitlint/config-conventional": "npm:^19.8.1"
     "@eslint/compat": "npm:^1.3.2"

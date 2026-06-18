@@ -12,27 +12,40 @@ import {
   View,
 } from 'react-native';
 
-import NativeEditableListView from './EditableListViewNativeComponent';
+import NativeFluxListView from './FluxListViewNativeComponent';
 
 type NativePassthroughProps = Omit<
-  React.ComponentProps<typeof NativeEditableListView>,
-  'itemCount' | 'itemHeights' | 'rowItemIndices'
+  React.ComponentProps<typeof NativeFluxListView>,
+  | 'estimatedItemHeight'
+  | 'itemCount'
+  | 'itemHeights'
+  | 'mountedRowIndices'
+  | 'rowItemIndices'
+  | 'onVisibleRangeChange'
 >;
 
 type SwipeActionEvent = Parameters<
+  NonNullable<React.ComponentProps<typeof NativeFluxListView>['onSwipeAction']>
+>[0];
+
+type VisibleRangeEvent = Parameters<
   NonNullable<
-    React.ComponentProps<typeof NativeEditableListView>['onSwipeAction']
+    React.ComponentProps<typeof NativeFluxListView>['onVisibleRangeChange']
   >
 >[0];
 
-export type EditableListVirtualizationConfig = {
+export type FluxListVirtualizationConfig = {
   enabled?: boolean;
+  estimatedItemHeight?: number;
+  fixedItemHeight?: number;
   initialNumToRender?: number;
   maxToRenderPerBatch?: number;
+  overscan?: number;
   updateCellsBatchingPeriod?: number;
+  windowSize?: number;
 };
 
-type EditableListViewProps<ItemT> = {
+type FluxListViewProps<ItemT> = {
   data?: ItemT[];
   renderItem?: (info: {
     item: ItemT;
@@ -57,22 +70,22 @@ type EditableListViewProps<ItemT> = {
     | ((info: { highlighted: boolean }) => React.ReactElement | null)
     | null;
   searchEnabled?: React.ComponentProps<
-    typeof NativeEditableListView
+    typeof NativeFluxListView
   >['searchEnabled'];
   searchPlaceholder?: React.ComponentProps<
-    typeof NativeEditableListView
+    typeof NativeFluxListView
   >['searchPlaceholder'];
   onSearchChange?: React.ComponentProps<
-    typeof NativeEditableListView
+    typeof NativeFluxListView
   >['onSearchChange'];
   swipeActions?: React.ComponentProps<
-    typeof NativeEditableListView
+    typeof NativeFluxListView
   >['swipeActions'];
   onSwipeAction?: React.ComponentProps<
-    typeof NativeEditableListView
+    typeof NativeFluxListView
   >['onSwipeAction'];
   extraData?: unknown;
-  virtualization?: EditableListVirtualizationConfig;
+  virtualization?: FluxListVirtualizationConfig;
 } & NativePassthroughProps;
 
 const noopSeparators = {
@@ -82,7 +95,7 @@ const noopSeparators = {
 };
 
 function normalizeComponent(
-  component: EditableListViewProps<unknown>['ListHeaderComponent']
+  component: FluxListViewProps<unknown>['ListHeaderComponent']
 ) {
   if (!component) {
     return null;
@@ -91,7 +104,7 @@ function normalizeComponent(
   return typeof component === 'function' ? component({}) : component;
 }
 
-function EditableListView<ItemT>(props: EditableListViewProps<ItemT>) {
+function FluxListView<ItemT>(props: FluxListViewProps<ItemT>) {
   const {
     data,
     renderItem,
@@ -110,7 +123,9 @@ function EditableListView<ItemT>(props: EditableListViewProps<ItemT>) {
     ...rest
   } = props;
 
-  const [itemHeights, setItemHeights] = useState<number[]>([]);
+  const [itemHeightsByRow, setItemHeightsByRow] = useState<
+    Record<number, number>
+  >({});
   const batchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const batchInteractionTaskRef = useRef<{ cancel: () => void } | null>(null);
   const interactionReleaseTimeoutRef = useRef<ReturnType<
@@ -120,8 +135,19 @@ function EditableListView<ItemT>(props: EditableListViewProps<ItemT>) {
   const touchMaxDeltaRef = useRef<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
   const [renderedItemCount, setRenderedItemCount] = useState<number>(0);
   const [isInteracting, setIsInteracting] = useState(false);
+  const [renderWindow, setRenderWindow] = useState({ first: 0, last: -1 });
+  const renderWindowRef = useRef(renderWindow);
 
   const virtualizationEnabled = virtualization?.enabled === true;
+  const supportsNativeWindowing =
+    virtualizationEnabled &&
+    !ListHeaderComponent &&
+    !ListFooterComponent &&
+    !ItemSeparatorComponent;
+  const estimatedItemHeight = Math.max(
+    1,
+    virtualization?.fixedItemHeight ?? virtualization?.estimatedItemHeight ?? 96
+  );
   const initialNumToRender = Math.max(
     1,
     virtualization?.initialNumToRender ?? 24
@@ -134,32 +160,35 @@ function EditableListView<ItemT>(props: EditableListViewProps<ItemT>) {
     16,
     virtualization?.updateCellsBatchingPeriod ?? 48
   );
+  const windowSize = Math.max(
+    initialNumToRender,
+    virtualization?.windowSize ?? 64
+  );
+  const overscan = Math.max(
+    0,
+    virtualization?.overscan ?? Math.floor(windowSize * 0.5)
+  );
   const hasSwipeActions =
     (swipeActions?.leading?.length ?? 0) > 0 ||
     (swipeActions?.trailing?.length ?? 0) > 0;
-  const updateItemHeight = useCallback((index: number, height: number) => {
-    if (height <= 0) {
-      return;
-    }
-    setItemHeights((prev) => {
-      if (prev[index] === height) {
-        return prev;
+  const shouldMeasureItemHeights = virtualization?.fixedItemHeight == null;
+  const updateItemHeight = useCallback(
+    (index: number, height: number) => {
+      if (!shouldMeasureItemHeights || height <= 0) {
+        return;
       }
-      const next = prev.length > index ? prev.slice() : prev.slice();
-      while (next.length < index) {
-        next.push(-1);
-      }
-      if (next.length === index) {
-        next.push(height);
-        return next;
-      }
-      next[index] = height;
-      return next;
-    });
-  }, []);
+      setItemHeightsByRow((prev) => {
+        if (prev[index] === height) {
+          return prev;
+        }
+        return { ...prev, [index]: height };
+      });
+    },
+    [shouldMeasureItemHeights]
+  );
 
   useEffect(() => {
-    setItemHeights([]);
+    setItemHeightsByRow({});
   }, [
     data,
     ListHeaderComponent,
@@ -169,6 +198,14 @@ function EditableListView<ItemT>(props: EditableListViewProps<ItemT>) {
   ]);
 
   const totalCount = data?.length ?? 0;
+
+  useEffect(() => {
+    const last =
+      totalCount === 0 ? -1 : Math.min(initialNumToRender - 1, totalCount - 1);
+    const nextWindow = { first: 0, last };
+    renderWindowRef.current = nextWindow;
+    setRenderWindow(nextWindow);
+  }, [data, totalCount, initialNumToRender, extraData]);
 
   const clearInteractionReleaseTimeout = useCallback(() => {
     if (interactionReleaseTimeoutRef.current) {
@@ -258,9 +295,40 @@ function EditableListView<ItemT>(props: EditableListViewProps<ItemT>) {
     [onSwipeAction, scheduleInteractionRelease]
   );
 
+  const handleVisibleRangeChange = useCallback(
+    (event: VisibleRangeEvent) => {
+      if (!supportsNativeWindowing || totalCount === 0) {
+        return;
+      }
+
+      const firstVisible = Math.max(0, event.nativeEvent.first);
+      const lastVisible = Math.min(totalCount - 1, event.nativeEvent.last);
+      if (lastVisible < firstVisible) {
+        return;
+      }
+
+      const visibleCount = lastVisible - firstVisible + 1;
+      const targetCount = Math.max(windowSize, visibleCount + overscan * 2);
+      const midpoint = Math.floor((firstVisible + lastVisible) / 2);
+      let first = Math.max(0, midpoint - Math.floor(targetCount / 2));
+      let last = Math.min(totalCount - 1, first + targetCount - 1);
+      first = Math.max(0, last - targetCount + 1);
+
+      const current = renderWindowRef.current;
+      if (current.first === first && current.last === last) {
+        return;
+      }
+
+      const nextWindow = { first, last };
+      renderWindowRef.current = nextWindow;
+      setRenderWindow(nextWindow);
+    },
+    [overscan, supportsNativeWindowing, totalCount, windowSize]
+  );
+
   useEffect(() => {
     setRenderedItemCount((prev) => {
-      if (!virtualizationEnabled) {
+      if (!virtualizationEnabled || supportsNativeWindowing) {
         return totalCount;
       }
       if (totalCount === 0) {
@@ -271,7 +339,13 @@ function EditableListView<ItemT>(props: EditableListViewProps<ItemT>) {
       }
       return Math.min(prev, totalCount);
     });
-  }, [totalCount, virtualizationEnabled, initialNumToRender, extraData]);
+  }, [
+    totalCount,
+    virtualizationEnabled,
+    supportsNativeWindowing,
+    initialNumToRender,
+    extraData,
+  ]);
 
   useEffect(() => {
     if (batchTimeoutRef.current) {
@@ -283,7 +357,7 @@ function EditableListView<ItemT>(props: EditableListViewProps<ItemT>) {
       batchInteractionTaskRef.current = null;
     }
 
-    if (!virtualizationEnabled) {
+    if (!virtualizationEnabled || supportsNativeWindowing) {
       return;
     }
 
@@ -320,6 +394,7 @@ function EditableListView<ItemT>(props: EditableListViewProps<ItemT>) {
     renderedItemCount,
     totalCount,
     virtualizationEnabled,
+    supportsNativeWindowing,
     isInteracting,
     maxToRenderPerBatch,
     updateCellsBatchingPeriod,
@@ -342,12 +417,30 @@ function EditableListView<ItemT>(props: EditableListViewProps<ItemT>) {
     };
   }, []);
 
-  const { children, rowCount, rowItemIndices } = useMemo(() => {
+  const {
+    children,
+    mountedRowIndices,
+    rowCount,
+    rowItemHeights,
+    rowItemIndices,
+  } = useMemo(() => {
     if (!data || data.length === 0) {
-      return { children: null, rowCount: 0, rowItemIndices: [] as number[] };
+      return {
+        children: null,
+        mountedRowIndices: [] as number[],
+        rowCount: 0,
+        rowItemHeights: [] as number[],
+        rowItemIndices: [] as number[],
+      };
     }
 
-    const rowsData = virtualizationEnabled
+    const windowFirst = supportsNativeWindowing ? renderWindow.first : 0;
+    const windowLast = supportsNativeWindowing
+      ? Math.min(renderWindow.last, data.length - 1)
+      : -1;
+    const rowsData = supportsNativeWindowing
+      ? data.slice(windowFirst, windowLast + 1)
+      : virtualizationEnabled
       ? data.slice(0, Math.min(renderedItemCount, data.length))
       : data;
 
@@ -359,11 +452,13 @@ function EditableListView<ItemT>(props: EditableListViewProps<ItemT>) {
           : null);
 
     const elements: React.ReactElement[] = [];
+    const nextMountedRowIndices: number[] = [];
     const nextRowItemIndices: number[] = [];
     let rowIndex = 0;
     const header = normalizeComponent(ListHeaderComponent);
     if (header) {
       const index = rowIndex++;
+      nextMountedRowIndices.push(index);
       nextRowItemIndices.push(-1);
       elements.push(
         <View
@@ -380,18 +475,20 @@ function EditableListView<ItemT>(props: EditableListViewProps<ItemT>) {
     }
 
     rowsData.forEach((item, index) => {
+      const itemIndex = supportsNativeWindowing ? windowFirst + index : index;
       const element = resolvedRenderItem({
         item,
-        index,
+        index: itemIndex,
         separators: noopSeparators,
       });
       if (element) {
         const elementKey =
-          keyExtractor?.(item, index) ??
+          keyExtractor?.(item, itemIndex) ??
           (typeof element.key === 'string' ? element.key : null) ??
-          String(index);
-        const rowSlot = rowIndex++;
-        nextRowItemIndices.push(index);
+          String(itemIndex);
+        const rowSlot = supportsNativeWindowing ? itemIndex : rowIndex++;
+        nextMountedRowIndices.push(rowSlot);
+        nextRowItemIndices.push(itemIndex);
         elements.push(
           <View
             key={elementKey}
@@ -416,6 +513,7 @@ function EditableListView<ItemT>(props: EditableListViewProps<ItemT>) {
             : ItemSeparatorComponent;
         if (separator) {
           const rowSlot = rowIndex++;
+          nextMountedRowIndices.push(rowSlot);
           nextRowItemIndices.push(-1);
           elements.push(
             <View
@@ -439,6 +537,7 @@ function EditableListView<ItemT>(props: EditableListViewProps<ItemT>) {
     const footer = normalizeComponent(ListFooterComponent);
     if (footer) {
       const index = rowIndex++;
+      nextMountedRowIndices.push(index);
       nextRowItemIndices.push(-1);
       elements.push(
         <View
@@ -454,9 +553,14 @@ function EditableListView<ItemT>(props: EditableListViewProps<ItemT>) {
       );
     }
 
+    const nativeRowCount = supportsNativeWindowing ? totalCount : rowIndex;
     return {
       children: elements,
-      rowCount: rowIndex,
+      mountedRowIndices: nextMountedRowIndices,
+      rowCount: nativeRowCount,
+      rowItemHeights: nextMountedRowIndices.map(
+        (row) => itemHeightsByRow[row] ?? 0
+      ),
       rowItemIndices: nextRowItemIndices,
     };
     // `extraData` is intentionally included to force row recomputation.
@@ -470,17 +574,24 @@ function EditableListView<ItemT>(props: EditableListViewProps<ItemT>) {
     ItemSeparatorComponent,
     extraData,
     virtualizationEnabled,
+    supportsNativeWindowing,
     renderedItemCount,
+    renderWindow,
+    totalCount,
+    itemHeightsByRow,
     updateItemHeight,
   ]);
 
   return (
-    <NativeEditableListView
+    <NativeFluxListView
       {...rest}
+      estimatedItemHeight={estimatedItemHeight}
       swipeActions={swipeActions}
-      itemHeights={itemHeights}
+      itemHeights={rowItemHeights}
       itemCount={rowCount}
+      mountedRowIndices={mountedRowIndices}
       rowItemIndices={rowItemIndices}
+      onVisibleRangeChange={handleVisibleRangeChange}
       onSwipeAction={handleSwipeAction}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
@@ -488,7 +599,7 @@ function EditableListView<ItemT>(props: EditableListViewProps<ItemT>) {
       onTouchCancel={handleTouchCancel}
     >
       {children}
-    </NativeEditableListView>
+    </NativeFluxListView>
   );
 }
 
@@ -498,4 +609,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default EditableListView;
+export default FluxListView;

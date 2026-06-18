@@ -1,12 +1,12 @@
-# react-native-editable-list
+# react-native-fluxlist
 
-A fully native editable list for React Native with selection mode, batch actions, and swipe quick actions, backed by UITableView and RecyclerView.
+A high-performance native list for React Native with selection mode, batch actions, and swipe quick actions, backed by UITableView and RecyclerView.
 
 ## Installation
 
 
 ```sh
-npm install react-native-editable-list
+npm install react-native-fluxlist
 ```
 
 
@@ -14,14 +14,32 @@ npm install react-native-editable-list
 
 
 ```js
-import { EditableListView } from "react-native-editable-list";
+import { FluxListView } from "react-native-fluxlist";
 
 // ...
 
-<EditableListView
+<FluxListView
   data={[{ id: "1", title: "Row 1" }]}
   keyExtractor={(item) => item.id}
   renderItem={({ item }) => <Text>{item.title}</Text>}
+/>
+```
+
+For large fixed-height lists, enable native windowing so FluxList keeps the full
+native scroll range while mounting only a compact React window:
+
+```js
+<FluxListView
+  data={items}
+  keyExtractor={(item) => item.id}
+  virtualization={{
+    enabled: true,
+    fixedItemHeight: 412,
+    estimatedItemHeight: 412,
+    windowSize: 32,
+    overscan: 10,
+  }}
+  renderItem={({ item }) => <FeedCard item={item} />}
 />
 ```
 

@@ -1,4 +1,4 @@
-package editablelist.example
+package fluxlist.example
 
 import android.app.Application
 import com.facebook.react.PackageList

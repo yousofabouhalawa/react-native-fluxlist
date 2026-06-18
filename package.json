@@ -1,7 +1,7 @@
 {
-  "name": "react-native-editable-list",
+  "name": "react-native-fluxlist",
   "version": "0.1.0",
-  "description": "A fully native editable list for React Native with selection mode, batch actions, and swipe quick actions, backed by UITableView and RecyclerView.",
+  "description": "A high-performance native list for React Native with selection mode, batch actions, and swipe quick actions, backed by UITableView and RecyclerView.",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
   "exports": {
@@ -32,7 +32,7 @@
     "!**/.*"
   ],
   "scripts": {
-    "example": "yarn workspace react-native-editable-list-example",
+    "example": "yarn workspace react-native-fluxlist-example",
     "clean": "del-cli android/build example/android/build example/android/app/build example/ios/build lib",
     "prepare": "bob build",
     "typecheck": "tsc",
@@ -42,19 +42,22 @@
   },
   "keywords": [
     "react-native",
+    "list",
+    "performance",
+    "native",
     "ios",
     "android"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nasaqdev/react-native-editable-list.git"
+    "url": "git+https://github.com/nasaqdev/react-native-fluxlist.git"
   },
   "author": "Yousof Abouhalawa <me@yousofabouhalawa.com> (https://github.com/yousofabouhalawa)",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/nasaqdev/react-native-editable-list/issues"
+    "url": "https://github.com/nasaqdev/react-native-fluxlist/issues"
   },
-  "homepage": "https://github.com/nasaqdev/react-native-editable-list#readme",
+  "homepage": "https://github.com/nasaqdev/react-native-fluxlist#readme",
   "publishConfig": {
     "registry": "https://registry.npmjs.org/"
   },
@@ -110,15 +113,15 @@
     ]
   },
   "codegenConfig": {
-    "name": "EditableListViewSpec",
+    "name": "FluxListViewSpec",
     "type": "all",
     "jsSrcsDir": "src",
     "android": {
-      "javaPackageName": "com.editablelist"
+      "javaPackageName": "com.fluxlist"
     },
     "ios": {
       "componentProvider": {
-        "EditableListView": "EditableListView"
+        "FluxListView": "FluxListView"
       }
     }
   },

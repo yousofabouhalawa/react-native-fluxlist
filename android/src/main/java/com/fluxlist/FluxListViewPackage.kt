@@ -1,4 +1,4 @@
-package com.editablelist
+package com.fluxlist
 
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.NativeModule
@@ -6,10 +6,10 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.uimanager.ViewManager
 import java.util.ArrayList
 
-class EditableListViewPackage : ReactPackage {
+class FluxListViewPackage : ReactPackage {
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {
     val viewManagers: MutableList<ViewManager<*, *>> = ArrayList()
-    viewManagers.add(EditableListViewManager())
+    viewManagers.add(FluxListViewManager())
     return viewManagers
   }
 

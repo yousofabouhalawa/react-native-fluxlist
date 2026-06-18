@@ -2,7 +2,7 @@
   "compilerOptions": {
     "rootDir": ".",
     "paths": {
-      "react-native-editable-list": ["./src/index"]
+      "react-native-fluxlist": ["./src/index"]
     },
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,

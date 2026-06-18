@@ -1,3 +1,3 @@
-export { default as EditableListView } from './EditableListView';
-export type { EditableListVirtualizationConfig } from './EditableListView';
-export * from './EditableListViewNativeComponent';
+export { default as FluxListView } from './FluxListView';
+export type { FluxListVirtualizationConfig } from './FluxListView';
+export * from './FluxListViewNativeComponent';
